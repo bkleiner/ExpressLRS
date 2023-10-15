@@ -1314,6 +1314,7 @@ static void setupSerial()
 
     SerialMode mode = (sbusSerialOutput || sumdSerialOutput)  ? SERIAL_TX_ONLY : SERIAL_FULL;
     Serial.begin(serialBaud, config, mode, -1, invert);
+    Serial.setRxBufferSize(2048);
 #elif defined(PLATFORM_ESP32)
     uint32_t config = SERIAL_8N1;
 
@@ -1327,6 +1328,7 @@ static void setupSerial()
     }
 
     Serial.begin(serialBaud, config, GPIO_PIN_RCSIGNAL_RX, GPIO_PIN_RCSIGNAL_TX, invert);
+    Serial.setRxBufferSize(2048);
 #endif
 
     if (firmwareOptions.is_airport)

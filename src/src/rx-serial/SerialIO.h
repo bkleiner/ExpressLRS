@@ -123,7 +123,7 @@ protected:
     virtual void processBytes(uint8_t *bytes, uint16_t size) = 0;
 
 private:
-    const int defaultMaxSerialReadSize = 64;
+    const int defaultMaxSerialReadSize = 512;
     const int defaultMaxSerialWriteSize = 128;
 
     Stream *_inputPort;

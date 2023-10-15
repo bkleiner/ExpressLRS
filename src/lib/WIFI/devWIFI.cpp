@@ -79,9 +79,11 @@ static IPAddress ipAddress;
 #if defined(USE_MSP_WIFI) && defined(TARGET_RX)  //MSP2WIFI in enabled only for RX only at the moment
 #include "crsf2msp.h"
 #include "msp2crsf.h"
+#include "crsfws.h"
 
 #include "tcpsocket.h"
 TCPSOCKET wifi2tcp(5761); //port 5761 as used by BF configurator
+AsyncWebSocket crsfWSRoute("/crsf_ws");
 #endif
 
 #if defined(PLATFORM_ESP8266)
@@ -858,6 +860,28 @@ static void HandleContinuousWave(AsyncWebServerRequest *request) {
 }
 #endif
 
+#if defined(USE_MSP_WIFI) && defined(TARGET_RX)
+static void WebHandleMSPEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
+{
+  switch (type) {
+    case WS_EVT_CONNECT:
+      client->ping();
+      break;
+    case WS_EVT_DATA: {
+      AwsFrameInfo *info = (AwsFrameInfo*)arg;
+      if (info->opcode != WS_BINARY) {
+        // we only want binary frames
+        break;
+      }
+      crsfWS.FIFOin.atomicPushBytes(data, len);
+      break;
+    }
+    default:
+      break;
+  }
+}
+#endif
+
 static void initialize()
 {
   wifiStarted = false;
@@ -1066,6 +1090,8 @@ static void startServices()
   DBGLN("HTTPUpdateServer ready! Open http://%s.local in your browser", wifi_hostname);
   #if defined(USE_MSP_WIFI) && defined(TARGET_RX)
   wifi2tcp.begin();
+  crsfWSRoute.onEvent(WebHandleMSPEvent);
+  server.addHandler(&crsfWSRoute);
   #endif
 }
 
@@ -1192,9 +1218,26 @@ void HandleMSP2WIFI()
     msp2crsf.parse(data, bytesReady);
   }
 
+  if (crsfWSRoute.availableForWriteAll() && crsfWS.FIFOout.size() > 0)
+  {
+    crsfWS.FIFOout.lock();
+    const uint16_t size = crsfWS.FIFOout.size();
+    AsyncWebSocketMessageBuffer *buffer = crsfWSRoute.makeBuffer(size);
+    crsfWS.FIFOout.popBytes(buffer->get(), size);
+    crsfWS.FIFOout.unlock();
+    crsfWSRoute.binaryAll(buffer);
+  }
+
   wifi2tcp.handle();
   #endif
 }
+
+#if defined(USE_MSP_WIFI) && defined(TARGET_RX)
+bool WifiHasMSPClient()
+{
+  return wifi2tcp.hasClient() || crsfWSRoute.count();
+}
+#endif
 
 static int start()
 {
